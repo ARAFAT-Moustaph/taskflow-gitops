@@ -242,10 +242,12 @@ Cette fois-ci :
 | **#15** | **11:57** | `2.1.0` | Déploiement 2.1.0 avec test auto | PR mergée sur `main` | ~66 s | Palier 25 % : k6 mesure 28.81 % d'erreurs. **Abort automatique par Argo Rollouts en 2s**. |
 | **#16** | **12:17** | `2.0.0` | Réalignement Git (Revert incident) | PR `git revert` mergée | ~30 s | Élimination de la dérive (*drift*) entre Git et le cluster Kubernetes. |
 | **#17** | **12:25** | `2.2.0` | Déploiement correctif 2.2.0 | PR mergée sur `main` | ~2m30 | Palier 25 % : AnalysisRun **`Successful`**. Promotion automatique à 50%, 75% puis **100 % Healthy**. |
+| **#19** | **16:20** | `2.2.0` | Mise en place Quality Gates PSSI | PR mergée sur `main` | ~25 s | Intégration conftest (Rego R1-R4), Trivy (R5) et `.trivyignore` justifié. Pipeline CI 100% vert. |
+| **#20** | **16:30** | `latest` | Tentative déploiement non-conforme | PR bloquée par Ruleset | Immédiat | Échec conftest (PSSI-R1 & R2). **Merge formellement bloqué par le Ruleset**. PR fermée. |
 
 ---
 
-## 8. Galerie Intégrale des 26 Preuves Visuelles
+## 8. Galerie Intégrale des 29 Preuves Visuelles
 
 ### Partie 1 : Socle GitOps & Cycle de Vie Initial
 | Réf | Description de la Preuve | Aperçu Visuel |
@@ -285,9 +287,46 @@ Cette fois-ci :
 | **Preuve 25** | **Rollout 2.2.0 finalisé à 100 %** : Statut `✔ Healthy`, 4 pods actifs sur la version corrective 2.2.0. | ![Preuve 25](screenshots/25-rollout-healthy-2.2.0.png) |
 | **Preuve 26** | **Tableau comparatif des AnalysisRuns** : Vue conjointe de l'AnalysisRun 2.1.0 en `Failed` et 2.2.0 en `Successful`. | ![Preuve 26](screenshots/26-analysisrun-succes-2.2.0.png) |
 
+### Partie 4 : Mini-PSSI, Policy-as-Code & Quality Gates CI/CD
+| Réf | Description de la Preuve | Aperçu Visuel |
+| :--- | :--- | :--- |
+| **Preuve 27** | **Échec conftest sur PSSI-R4** : Détection bloquante de l'absence de `securityContext.runAsNonRoot: true` dans `rollout.yaml` avant correction. | ![Preuve 27](screenshots/27-pssi-r4-fail.png) |
+| **Preuve 28** | **Pipeline CI 100 % Vert sur PR #19** : Validation conjointe des manifests (`conftest`) et du scan d'image (`Trivy`) avec `.trivyignore` daté et justifié. | ![Preuve 28](screenshots/28-pssi-ci-green.png) |
+| **Preuve 29** | **Blocage strict par le Ruleset GitHub sur PR #20** : Interdiction formelle de fusionner une image non conforme (`nginx:latest` violant R1 et R2). | ![Preuve 29](screenshots/29-pr-blocked-ruleset.png) |
+
 ---
 
-## 9. Guide de Reproduction & Commandes Clés
+## 9. Analyse Technique de la Mini-PSSI en Quality Gates (Partie C)
+
+### Architecture Policy-as-Code (Shift-Left Security)
+La sécurité de l'infrastructure est déplacée au plus tôt dans le cycle de vie du code (*Shift-Left*) :
+* **OPA / Rego (`policies/kubernetes.rego`) :** Moteur déclaratif évaluant la conformité des manifests Kubernetes (`Deployment`, `Rollout`, etc.) avant toute application sur le cluster.
+* **Conftest :** Outil CLI exécuté en local par les développeurs et dans le pipeline GitHub Actions (`.github/workflows/pssi.yml`). Il bloque immédiatement toute Pull Request ne respectant pas les règles PSSI.
+
+### Analyse des Vulnérabilités Conteneur (Trivy & Dérogations)
+* **Trivy (v0.75.0) :** Scan automatisé des images de conteneurs extraites dynamiquement des manifests de production. Le paramètre `--exit-code 1` sur les sévérités `HIGH,CRITICAL` applique une politique de tolérance zéro sur les failles connues et réparables.
+* **Gestion formelle des dérogations (`.trivyignore`) :** Conformément à l'exigence de la PSSI-R5, aucune exception n'est tacite. L'image `taskflow:2.2.0` comportant 9 vulnérabilités HIGH (3 sur `starlette`, 6 sur `urllib3`), un fichier `.trivyignore` strict a été consigné à la racine, daté du 15/10/2026, signé par Aimen KLAI et Moustapha ARAFAT, avec justification des vecteurs d'attaque neutralisés et échéance fixée à 1 mois.
+
+### Verrouillage par GitHub Ruleset
+Le Ruleset de branche `gitops` protégeant `main` a été durci avec la règle `required_status_checks` imposant :
+1. `PSSI manifests (conftest)`
+2. `PSSI images (Trivy)`
+
+Toute tentative de déploiement d'une image non certifiée (ex: `nginx:latest` lors de la PR #20) est mathématiquement bloquée sans possibilité de contournement (*Merge button disabled*).
+
+### Tableau d'Évaluation du Livrable PSSI
+
+| Règle | Exigence PSSI | Pourquoi | Vérifiée par | Preuve Visuelle | Statut Final |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **PSSI-R1** | Tag d'image explicite, jamais `latest` | Savoir exactement ce qui tourne en production, garantir la traçabilité et le rollback. | `conftest` (Rego) | **Preuve 29** | **Conforme (`Pass`)** |
+| **PSSI-R2** | Registre autorisé uniquement (`ghcr.io/9m7fjfpv9k-cyber/`) | Empêcher le déploiement d'images tierces ou de conteneurs inconnus en production. | `conftest` (Rego) | **Preuve 29** | **Conforme (`Pass`)** |
+| **PSSI-R3** | Limite mémoire obligatoire (`resources.limits.memory`) | Éviter qu'un conteneur en fuite mémoire n'épuise la RAM du nœud (*OOMKilled* généralisé). | `conftest` (Rego) | **Preuve 28** | **Conforme (`Pass`)** |
+| **PSSI-R4** | Exécution non-root obligatoire (`runAsNonRoot: true`) | Réduire la surface d'attaque et limiter l'impact d'une compromission de conteneur. | `conftest` (Rego) | **Preuve 27** (Échec) & **Preuve 28** (Succès) | **Conforme (`Pass`)** |
+| **PSSI-R5** | Aucune vulnérabilité HIGH ou CRITICAL corrigeable sans dérogation | Ne pas livrer en production une faille de sécurité connue et réparable. | `Trivy` (0.75.0) | **Preuve 28** & [`.trivyignore`](.trivyignore) | **Conforme avec Dérogation validée** |
+
+---
+
+## 10. Guide de Reproduction & Commandes Clés
 
 ### 1. Surveillance et tirs de charge
 ```bash
@@ -329,4 +368,14 @@ kubectl logs -n taskflow -l job-name --tail=30
 
 # Consulter la chronologie exacte des événements système du namespace
 kubectl get events -n taskflow --sort-by='.lastTimestamp'
+```
+
+### 4. Vérification de la Sécurité & Quality Gates (PSSI)
+```bash
+# Tester la conformité des manifests Kubernetes avec conftest
+conftest test apps/ --policy policies/
+
+# Scanner les vulnérabilités de l'image conteneur avec Trivy en local
+docker run --rm -v "$PWD:/work" -w /work aquasec/trivy:0.75.0 image \
+  --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 ghcr.io/9m7fjfpv9k-cyber/taskflow:2.2.0
 ```
