@@ -1,6 +1,6 @@
-# Canary : la nouvelle version reçoit une part croissante du trafic.
-# Sans maillage de service, la part de trafic suit la proportion de pods :
-# 4 réplicas → 25 % = 1 pod sur 4.
+# Canary avec test de robustesse automatique.
+# Au palier de 25 %, Argo Rollouts lance un test de charge k6 sur les seuls pods
+# de la nouvelle version (service taskflow-canary). Test raté = abandon automatique.
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -42,12 +42,22 @@ spec:
               memory: 256Mi
   strategy:
     canary:
+      canaryService: taskflow-canary
       steps:
         - setWeight: 25
-        - pause: {}
+        # Laisser au service taskflow-canary le temps de basculer vers les nouveaux pods
+        # (Argo Rollouts attend qu'un pod canary soit prêt) avant de lancer le test.
+        - pause:
+            duration: 20s
+        - analysis:
+            templates:
+              - templateName: robustesse-k6
+            args:
+              - name: cible
+                value: http://taskflow-canary
         - setWeight: 50
         - pause:
-            duration: 60s
+            duration: 30s
         - setWeight: 75
         - pause:
             duration: 30s
