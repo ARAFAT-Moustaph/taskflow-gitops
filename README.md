@@ -242,9 +242,73 @@ Annulation tracée de la version défaillante sur GitHub, réalignant l'état d�
 
 ### 3. Contrôle des pods Kubernetes
 ```bash
-# Observer les réplicas actifs et leur statut
-kubectl get pods -n taskflow
 
-# Constater la suppression automatique des pods après le délai de drainage
-kubectl get pods -n taskflow -w
-```
+---
+
+## 8. Lab Robustesse & Analyse Automatique (Canary 2.0.0 → 2.1.0 → Abort Automatique → 2.2.0)
+
+### 8.1 Objectif et rupture avec le déploiement manuel
+Dans le TP précédent, l'interruption d'une version bugguée nécessitait une surveillance visuelle humaine et une action manuelle en CLI (`kubectl argo rollouts abort`).  
+Ce lab met en œuvre le standard de l'ingénierie **SRE (Site Reliability Engineering)** : l'**Automated Canary Analysis (ACA)**. C'est le contrôleur **Argo Rollouts** qui lance de manière autonome un test de charge (**k6**) dès le premier palier de trafic. Si les métriques ne respectent pas les seuils de qualité fixés, le déploiement est **avorté instantanément de manière automatique**, sans aucune action humaine.
+
+Le rapport d'incident complet est consigné dans le document officiel : [docs/postmortem-2.1.0.md](docs/postmortem-2.1.0.md).
+
+---
+
+### 8.2 Phase A : Mesure de l'Étalon de référence (*Baseline*)
+Avant d'injecter des anomalies, nous mesurons les performances de référence sur la version stable en production (**v2.0.0**) via `./scripts/charge.sh http://taskflow` (5 VUs, 30 secondes).
+
+| Métrique | Seuil d'acceptabilité | Valeur mesurée (v2.0.0) | Statut |
+| :--- | :--- | :--- | :--- |
+| **Taux d'erreur (`http_req_failed`)** | `< 2.00 %` | **`0.00 %`** (0 échec / 708 req) | ✅ Validé |
+| **Latence p95 (`http_req_duration`)** | `< 250 ms` | **`21.71 ms`** | ✅ Validé |
+| **Statut global** | Code sortie 0 | 100 % de codes HTTP 200 | ✅ Étalon conforme |
+
+---
+
+### 8.3 Phase B : L'Incident 2.1.0 et l'Interception Automatique
+
+#### 1. Déploiement de la version 2.1.0
+* **Pull Request #15** mergée sur `main` avec la version `2.1.0`.
+* Argo Rollouts alloue 25 % du trafic (1 pod révision 5) et attend 20 secondes (`CanaryPauseStep`).
+* Lancement automatique de l'objet **`AnalysisRun`** (`taskflow-df976ccb5-5-2`) qui déclenche un Job k6 ciblant `http://taskflow-canary`.
+
+#### 2. Les 4 preuves de l'enquête technique
+1. **Preuve n°1 (Statut Rollout)** : Le Rollout bascule en **`✖ Degraded`** avec le message `Metric "test-de-charge-k6" assessed Failed due to failed (1) > failureLimit (0)`. Le pod défaillant est immédiatement stoppé (`ScaledDown`).
+2. **Preuve n°2 (Statut AnalysisRun)** : `taskflow-df976ccb5-5-2` passe en **`Failed`**.
+3. **Preuve n°3 (Logs du test k6)** : Le test k6 a mesuré **28.81 % d'erreurs HTTP** (85 requêtes échouées sur 295) et une latence **p95 de 327.1 ms** (violant le seuil de 250 ms).
+4. **Preuve n°4 (Cécité des probes Kubernetes)** : Les sondes `readinessProbe` et `livenessProbe` interrogeaient uniquement `/health` (qui renvoyait un faux positif `200 OK`). Le bug impactait exclusivement l'endpoint métier `/tasks` (erreurs `HTTP 500`). Seul le test k6 a pu dévoiler la défaillance.
+
+#### 3. Résolution du Drift Git
+* Le cluster a réagi seul, mais la branche `main` pointait toujours vers `2.1.0`.
+* Pour réaligner Git avec la production, la **Pull Request #16** de Git Revert a été soumise, approuvée et mergée.
+
+---
+
+### 8.4 Phase C : Déploiement de la version corrective 2.2.0
+1. Mise à jour de `rollout.yaml` avec l'image `ghcr.io/9m7fjfpv9k-cyber/taskflow:2.2.0`.
+2. Soumission et merge de la **Pull Request #17**.
+3. Au palier 25 %, l'AnalysisRun `taskflow-7ddd57d788-7-2` s'exécute avec succès :
+   * **Taux d'erreur** : `0.00 %`
+   * **Latence p95** : `< 250 ms`
+   * **Statut AnalysisRun** : **`✔ Successful`**
+4. Argo Rollouts déclenche l'avancement automatique : passage à 50 % (pause 30s) → 75 % (pause 30s) → **100 %**.
+5. Statut final du cluster : **`✔ Healthy`** avec les 4 pods en version 2.2.0.
+
+---
+
+### 8.5 Galerie de Preuves du Lab Robustesse
+
+| Preuve | Description | Capture |
+| :--- | :--- | :--- |
+| **Preuve 16** | **Étalon de référence v2.0.0** : Sortie terminal k6 validant p95=21.71ms et 0 % d'erreurs | ![Étalon k6 v2.0.0](screenshots/16-etalon-k6-2.0.0.png) |
+| **Preuve 17** | **PR #14** : Ajout de la configuration d'analyse automatique k6 (4 fichiers) | ![PR 14 Analyse Auto](screenshots/17-pr14-analyse-auto.png) |
+| **Preuve 18** | **Ressources K8s actives** : Déploiement de l'AnalysisTemplate, ConfigMap et Services | ![Ressources CRD](screenshots/18-k8s-crd-resources.png) |
+| **Preuve 19** | **Zéro Deployment** : Vérification de l'absence totale de Deployments concurrents | ![Zéro Deployment](screenshots/19-zero-deployment.png) |
+| **Preuve 20** | **PR #15** : Déploiement de la version candidate 2.1.0 | ![PR 15 Canary 2.1.0](screenshots/20-pr15-canary-2.1.0.png) |
+| **Preuve 21** | **Abort Automatique v2.1.0** : Rollout basculé en Degraded sans action humaine | ![AnalysisRun Échec 2.1.0](screenshots/21-analysisrun-echec-2.1.0.png) |
+| **Preuve 22** | **Preuve 1 Enquête** : AnalysisRun marqué `Failed` dans Kubernetes | ![Preuve 1 AnalysisRun Failed](screenshots/22-proof1-analysisrun-failed.png) |
+| **Preuve 23** | **Preuve 2 Enquête** : Logs k6 démontrant 28.81 % d'erreurs HTTP | ![Preuve 2 k6 logs failed](screenshots/23-proof2-k6-logs-failed.png) |
+| **Preuve 24** | **PR #16 de Revert** : Annulation GitOps de la PR 2.1.0 sur GitHub | ![Revert PR 16](screenshots/24-revert-pr16-canary-2.1.0.png) |
+| **Preuve 25** | **Rollout 2.2.0 Healthy** : Basculement à 100 % sur la version corrigée | ![Rollout Healthy 2.2.0](screenshots/25-rollout-healthy-2.2.0.png) |
+| **Preuve 26** | **AnalysisRun en Succès et Échec** : Vue comparative des deux analyses côte à côte | ![AnalysisRun Succès 2.2.0](screenshots/26-analysisrun-succes-2.2.0.png) |
