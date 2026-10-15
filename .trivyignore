@@ -1,0 +1,20 @@
+# ==============================================================================
+# Exceptions PSSI-R5 — Dérogation de sécurité temporaire TaskFlow
+# Auteurs : Aimen KLAI & Moustapha ARAFAT
+# Date d'émission : 2026-10-15
+# Date d'expiration : 2026-11-15 (1 mois)
+# Justification : Image officielle 2.2.0. Correctif prévu au prochain sprint.
+# ==============================================================================
+
+# Starlette
+CVE-2025-62727
+CVE-2026-48818
+CVE-2026-54283
+
+# urllib3
+CVE-2025-66418
+CVE-2025-66471
+CVE-2026-21441
+CVE-2026-44431
+CVE-2026-97687
+CVE-2026-97689
