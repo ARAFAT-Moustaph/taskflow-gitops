@@ -31,9 +31,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Lister les images TaskFlow déployées
         run: |
-          grep -rhoE 'image: *ghcr\.io/9m7fjfpv9k-cyber/[^ ]+' apps/ | awk '{print $2}' | sort -u > images.txt
-          echo "Images à scanner :"
-          cat images.txt
+          grep -rhoE 'image: *ghcr\.io/9m7fjfpv9k-cyber/[^ ]+' apps/ | awk '{print $2}' | tr -d '\r' | sort -u > images.txt
+
       - name: Scanner les images (PSSI-R5)
         run: |
           status=0
