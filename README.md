@@ -4,9 +4,10 @@
 
 ---
 
-## Composition du Binôme
+## Composition de l'Équipe
 - **Aimen KLAI** ([@aimenklai](https://github.com/aimenklai))
 - **Moustapha ARAFAT** ([@ARAFAT-Moustaph](https://github.com/ARAFAT-Moustaph))
+- **Rayen KLAI** ([@klaiproalternance-ship-it](https://github.com/klaiproalternance-ship-it))
 
 **Dépôt GitOps officiel :** [https://github.com/ARAFAT-Moustaph/taskflow-gitops](https://github.com/ARAFAT-Moustaph/taskflow-gitops)
 
@@ -19,9 +20,10 @@
 4. [Stratégie 3 : Analyse Automatisée de Robustesse (SRE & Automated Canary Analysis)](#4-stratégie-3--analyse-automatisée-de-robustesse-sre--automated-canary-analysis)
 5. [Dossier d'Observabilité : Pourquoi et Comment Mesurer la Qualité ?](#5-dossier-dobservabilité--pourquoi-et-comment-mesurer-la-qualité)
 6. [Étude Comparative : Blue-Green vs Canary vs Canary Automatisé](#6-étude-comparative--blue-green-vs-canary-vs-canary-automatisé)
-7. [Journal Intégral des Déploiements (PR #1 à PR #17)](#7-journal-intégral-des-déploiements-pr-1-à-pr-17)
-8. [Galerie Intégrale des 26 Preuves Visuelles](#8-galerie-intégrale-des-26-preuves-visuelles)
-9. [Guide de Reproduction & Commandes Clés](#9-guide-de-reproduction--commandes-clés)
+7. [Journal Intégral des Déploiements (PR #1 à PR #22)](#7-journal-intégral-des-déploiements-pr-1-à-pr-22)
+8. [Galerie Intégrale des 29 Preuves Visuelles](#8-galerie-intégrale-des-29-preuves-visuelles)
+9. [Analyse Technique de la Mini-PSSI en Quality Gates (Partie C)](#9-analyse-technique-de-la-mini-pssi-en-quality-gates-partie-c)
+10. [Guide de Reproduction & Commandes Clés](#10-guide-de-reproduction--commandes-clés)
 
 ---
 
@@ -224,7 +226,7 @@ Cette fois-ci :
 
 ---
 
-## 7. Journal Intégral des Déploiements (PR #1 à PR #17)
+## 7. Journal Intégral des Déploiements (PR #1 à PR #22)
 
 | PR | Heure | Version | Action réalisée | Mécanisme / Commande | Délai mesuré | Résultat technique observé |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -244,6 +246,7 @@ Cette fois-ci :
 | **#17** | **12:25** | `2.2.0` | Déploiement correctif 2.2.0 | PR mergée sur `main` | ~2m30 | Palier 25 % : AnalysisRun **`Successful`**. Promotion automatique à 50%, 75% puis **100 % Healthy**. |
 | **#19** | **16:20** | `2.2.0` | Mise en place Quality Gates PSSI | PR mergée sur `main` | ~25 s | Intégration conftest (Rego R1-R4), Trivy (R5) et `.trivyignore` justifié. Pipeline CI 100% vert. |
 | **#20** | **16:30** | `latest` | Tentative déploiement non-conforme | PR bloquée par Ruleset | Immédiat | Échec conftest (PSSI-R1 & R2). **Merge formellement bloqué par le Ruleset**. PR fermée. |
+| **#22** | **16:46** | `2.2.0` | Documentation finale PSSI & Preuves 27-29 | PR mergée sur `main` | ~20 s | Validation conjointe des 29 preuves et du tableau de conformité PSSI. |
 
 ---
 
@@ -305,7 +308,7 @@ La sécurité de l'infrastructure est déplacée au plus tôt dans le cycle de v
 
 ### Analyse des Vulnérabilités Conteneur (Trivy & Dérogations)
 * **Trivy (v0.75.0) :** Scan automatisé des images de conteneurs extraites dynamiquement des manifests de production. Le paramètre `--exit-code 1` sur les sévérités `HIGH,CRITICAL` applique une politique de tolérance zéro sur les failles connues et réparables.
-* **Gestion formelle des dérogations (`.trivyignore`) :** Conformément à l'exigence de la PSSI-R5, aucune exception n'est tacite. L'image `taskflow:2.2.0` comportant 9 vulnérabilités HIGH (3 sur `starlette`, 6 sur `urllib3`), un fichier `.trivyignore` strict a été consigné à la racine, daté du 15/10/2026, signé par Aimen KLAI et Moustapha ARAFAT, avec justification des vecteurs d'attaque neutralisés et échéance fixée à 1 mois.
+* **Gestion formelle des dérogations (`.trivyignore`) :** Conformément à l'exigence de la PSSI-R5, aucune exception n'est tacite. L'image `taskflow:2.2.0` comportant 9 vulnérabilités HIGH (3 sur `starlette`, 6 sur `urllib3`), un fichier `.trivyignore` strict a été consigné à la racine, daté du 15/10/2026, signé par Aimen KLAI, Moustapha ARAFAT et Rayen KLAI, avec justification des vecteurs d'attaque neutralisés et échéance fixée à 1 mois.
 
 ### Verrouillage par GitHub Ruleset
 Le Ruleset de branche `gitops` protégeant `main` a été durci avec la règle `required_status_checks` imposant :
